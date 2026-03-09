@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ========= settings =========
 VMID="${VMID:-9001}"
 VMNAME="${VMNAME:-paperclip-ubuntu2404}"
-STORAGE="${STORAGE:-local-lvm}"          # disk storage for VM disk
-CISTORAGE="${CISTORAGE:-local-lvm}"      # storage for cloud-init drive
+STORAGE="${STORAGE:-local-lvm}"
+CISTORAGE="${CISTORAGE:-local-lvm}"
 BRIDGE="${BRIDGE:-vmbr0}"
 CORES="${CORES:-4}"
 MEMORY="${MEMORY:-8192}"
@@ -14,18 +13,16 @@ CI_USER="${CI_USER:-paper}"
 CI_PASSWORD="${CI_PASSWORD:-Test1234}"
 IPCONFIG0="${IPCONFIG0:-ip=dhcp}"
 CIUPGRADE="${CIUPGRADE:-1}"
-PUBLIC_HOST="${PUBLIC_HOST:-}"           # e.g. agents.darkatek7.com
-SSH_PUBKEY_FILE="${SSH_PUBKEY_FILE:-}"   # optional, e.g. /root/.ssh/id_ed25519.pub
+PUBLIC_HOST="${PUBLIC_HOST:-}"
+SSH_PUBKEY_FILE="${SSH_PUBKEY_FILE:-}"
 
-# Ubuntu 24.04 official cloud image
 IMG_DIR="/var/lib/vz/template/qcow2"
 IMG_FILE="${IMG_DIR}/noble-server-cloudimg-amd64.img"
-IMG_URL="https://cloud-images.ubuntu.com/releases/noble/release-20260225/ubuntu-24.04-server-cloudimg-amd64.img"
+IMG_URL="https://cloud-images.ubuntu.com/releases/noble/release/ubuntu-24.04-server-cloudimg-amd64.img"
 
 SNIPPET_DIR="/var/lib/vz/snippets"
 USERDATA_FILE="${SNIPPET_DIR}/paperclip-userdata-${VMID}.yaml"
 
-# ========= prechecks =========
 command -v qm >/dev/null || { echo "qm not found. Run this on a Proxmox host."; exit 1; }
 mkdir -p "$IMG_DIR" "$SNIPPET_DIR"
 
@@ -34,13 +31,11 @@ if qm status "$VMID" >/dev/null 2>&1; then
   exit 1
 fi
 
-# ========= download image =========
 if [[ ! -f "$IMG_FILE" ]]; then
   echo "Downloading Ubuntu 24.04 cloud image..."
   wget -O "$IMG_FILE" "$IMG_URL"
 fi
 
-# ========= build cloud-init userdata =========
 SSH_KEYS_BLOCK=""
 if [[ -n "$SSH_PUBKEY_FILE" && -f "$SSH_PUBKEY_FILE" ]]; then
   SSH_KEY_CONTENT="$(sed 's/[[:space:]]*$//' "$SSH_PUBKEY_FILE")"
@@ -83,9 +78,11 @@ write_files:
       PAPERCLIP_HOME="\${PAPER_HOME}/.paperclip"
       PAPERCLIP_DIR="\${PAPER_HOME}/paperclip-src"
       PUBLIC_HOST="${PUBLIC_HOST}"
+      AUTH_SECRET="\$(openssl rand -hex 32)"
+      PAPERCLIP_ENV_FILE="/etc/paperclip/paperclip.env"
 
       apt-get update
-      apt-get install -y ca-certificates curl git build-essential jq unzip
+      apt-get install -y ca-certificates curl git build-essential jq unzip openssl
 
       curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
       apt-get install -y nodejs
@@ -94,7 +91,7 @@ write_files:
       corepack enable
       corepack prepare pnpm@latest-10 --activate
 
-      mkdir -p "\${PAPER_HOME}/.local/bin" "\${PAPER_HOME}/arlberghosting"
+      mkdir -p "\${PAPER_HOME}/.local/bin" "\${PAPER_HOME}/arlberghosting" /etc/paperclip
       chown -R "\${PAPER_USER}:\${PAPER_USER}" "\${PAPER_HOME}"
 
       if [[ ! -d "\${PAPERCLIP_DIR}/.git" ]]; then
@@ -102,6 +99,16 @@ write_files:
       fi
 
       su - "\${PAPER_USER}" -c "cd '\${PAPERCLIP_DIR}' && PATH=/usr/local/bin:/usr/bin:/bin pnpm install"
+
+      cat > "\${PAPERCLIP_ENV_FILE}" <<ENVFILE
+      BETTER_AUTH_SECRET=\${AUTH_SECRET}
+      PAPERCLIP_AGENT_JWT_SECRET=\${AUTH_SECRET}
+      HOST=0.0.0.0
+      PORT=3100
+      NODE_ENV=production
+      PAPERCLIP_HOME=\${PAPERCLIP_HOME}
+      ENVFILE
+      chmod 600 "\${PAPERCLIP_ENV_FILE}"
 
       cat > /etc/systemd/system/paperclip.service <<SERVICE
       [Unit]
@@ -114,10 +121,7 @@ write_files:
       User=\${PAPER_USER}
       Group=\${PAPER_USER}
       WorkingDirectory=\${PAPERCLIP_DIR}
-      Environment=NODE_ENV=production
-      Environment=PAPERCLIP_HOME=\${PAPERCLIP_HOME}
-      Environment=HOST=0.0.0.0
-      Environment=PORT=3100
+      EnvironmentFile=\${PAPERCLIP_ENV_FILE}
       Environment=PATH=\${PAPER_HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin
       ExecStart=/usr/bin/pnpm dev:once -- --tailscale-auth
       Restart=always
@@ -133,11 +137,18 @@ write_files:
       set -euo pipefail
       SERVICE_NAME="paperclip"
       PUBLIC_HOST="\${PUBLIC_HOST:-}"
-      line="\$(journalctl -u "\${SERVICE_NAME}" -n 500 --no-pager | grep -Eo 'http://localhost:3100/board-claim/[^[:space:]]+' | tail -n 1 || true)"
-      [[ -n "\$line" ]] || { echo "No board-claim link found."; exit 1; }
+
+      line="\$(journalctl -u "\${SERVICE_NAME}" -n 1000 --no-pager | grep -Eo 'http://localhost:3100/(board-claim|invite)/[^[:space:]]+' | tail -n 1 || true)"
+      if [[ -z "\$line" ]]; then
+        line="\$(journalctl -u "\${SERVICE_NAME}" -n 1000 --no-pager | grep -Eo 'http://localhost:3100[^[:space:]]+' | tail -n 1 || true)"
+      fi
+
+      [[ -n "\$line" ]] || { echo "No board/bootstrap link found."; exit 1; }
+
       if [[ -n "\$PUBLIC_HOST" ]]; then
         line="\${line/http:\\/\\/localhost:3100/https:\\/\\/\${PUBLIC_HOST}}"
       fi
+
       echo "\$line"
       HELPER
       chmod +x /usr/local/bin/paperclip-board-link
@@ -145,7 +156,13 @@ write_files:
       systemctl daemon-reload
       systemctl enable --now paperclip
 
-      sleep 15
+      echo "Waiting for Paperclip health..."
+      for i in \$(seq 1 30); do
+        if curl -fsS http://127.0.0.1:3100/api/health >/tmp/paperclip-health.json 2>/dev/null; then
+          break
+        fi
+        sleep 2
+      done
 
       if [[ -n "\${PUBLIC_HOST}" ]]; then
         su - "\${PAPER_USER}" -c "cd '\${PAPERCLIP_DIR}' && pnpm paperclipai allowed-hostname '\${PUBLIC_HOST}'" || true
@@ -157,10 +174,14 @@ write_files:
         echo "==== PAPERCLIP INSTALL COMPLETE ===="
         echo "User: \${PAPER_USER}"
         echo "Password: \${PAPER_PASSWORD}"
+        echo "Env file: \${PAPERCLIP_ENV_FILE}"
         echo "Health:"
         curl -fsS http://127.0.0.1:3100/api/health || true
         echo
-        echo "Board link:"
+        echo "Service:"
+        systemctl is-active paperclip || true
+        echo
+        echo "Latest board/bootstrap link:"
         if [[ -n "\${PUBLIC_HOST}" ]]; then
           PUBLIC_HOST="\${PUBLIC_HOST}" /usr/local/bin/paperclip-board-link || true
         else
@@ -173,7 +194,6 @@ runcmd:
 final_message: "cloud-init finished"
 EOF
 
-# ========= create VM =========
 echo "Creating VM $VMID..."
 qm create "$VMID" \
   --name "$VMNAME" \
