@@ -59,7 +59,7 @@ You need:
 This setup uses this install script:
 
 ```text
-https://github.com/Darkatek7/proxmox-lxc-scripts/raw/refs/heads/main/Paperclip%20Ubuntu%20Mchine/install.sh
+https://raw.githubusercontent.com/Darkatek7/proxmox-lxc-scripts/refs/heads/main/Paperclip%20Ubuntu%20Machine/install.sh
 ````
 
 ## Example usage from the raw GitHub URL
@@ -67,7 +67,7 @@ https://github.com/Darkatek7/proxmox-lxc-scripts/raw/refs/heads/main/Paperclip%2
 Download and run:
 
 ```bash
-curl -fsSL "https://github.com/Darkatek7/proxmox-lxc-scripts/raw/refs/heads/main/Paperclip%20Ubuntu%20Mchine/install.sh" -o /root/install.sh
+curl -fsSL "https://raw.githubusercontent.com/Darkatek7/proxmox-lxc-scripts/refs/heads/main/Paperclip%20Ubuntu%20Machine/install.sh" -o /root/install.sh
 chmod +x /root/install.sh
 PUBLIC_HOST=agents.example.com /root/install.sh
 ```
@@ -75,7 +75,7 @@ PUBLIC_HOST=agents.example.com /root/install.sh
 Run directly without saving:
 
 ```bash
-curl -fsSL "https://github.com/Darkatek7/proxmox-lxc-scripts/raw/refs/heads/main/Paperclip%20Ubuntu%20Mchine/install.sh" | \
+curl -fsSL "https://raw.githubusercontent.com/Darkatek7/proxmox-lxc-scripts/refs/heads/main/Paperclip%20Ubuntu%20Machine/install.sh" | \
 PUBLIC_HOST=agents.example.com VMID=9001 VMNAME=paperclip-ubuntu2404 bash
 ```
 
@@ -109,7 +109,7 @@ PUBLIC_HOST=agents.example.com \
 ### Option 1: Download first, then run
 
 ```bash
-curl -fsSL "https://github.com/Darkatek7/proxmox-lxc-scripts/raw/refs/heads/main/Paperclip%20Ubuntu%20Mchine/install.sh" -o /root/install.sh
+curl -fsSL "https://raw.githubusercontent.com/Darkatek7/proxmox-lxc-scripts/refs/heads/main/Paperclip%20Ubuntu%20Machine/install.sh" -o /root/install.sh
 chmod +x /root/install.sh
 PUBLIC_HOST=agents.example.com /root/install.sh
 ```
@@ -117,14 +117,14 @@ PUBLIC_HOST=agents.example.com /root/install.sh
 ### Option 2: Run directly from GitHub
 
 ```bash
-curl -fsSL "https://github.com/Darkatek7/proxmox-lxc-scripts/raw/refs/heads/main/Paperclip%20Ubuntu%20Mchine/install.sh" | \
+curl -fsSL "https://raw.githubusercontent.com/Darkatek7/proxmox-lxc-scripts/refs/heads/main/Paperclip%20Ubuntu%20Machine/install.sh" | \
 PUBLIC_HOST=agents.example.com VMID=9001 VMNAME=paperclip-ubuntu2404 bash
 ```
 
 ## Recommended full example
 
 ```bash
-curl -fsSL "https://github.com/Darkatek7/proxmox-lxc-scripts/raw/refs/heads/main/Paperclip%20Ubuntu%20Mchine/install.sh" -o /root/install.sh && \
+curl -fsSL "https://raw.githubusercontent.com/Darkatek7/proxmox-lxc-scripts/refs/heads/main/Paperclip%20Ubuntu%20Machine/install.sh" -o /root/install.sh && \
 chmod +x /root/install.sh && \
 PUBLIC_HOST=agents.example.com \
 VMID=9001 \
