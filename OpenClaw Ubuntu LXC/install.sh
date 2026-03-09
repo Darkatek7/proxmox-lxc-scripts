@@ -173,13 +173,15 @@ pct exec "${CTID}" -- bash -lc '
   set -euo pipefail
   cd /opt/openclaw
 
-  if ! grep -q "^OPENCLAW_IMAGE=" .env 2>/dev/null; then
+  if grep -q "^OPENCLAW_IMAGE=" .env 2>/dev/null; then
+    sed -i "s#^OPENCLAW_IMAGE=.*#OPENCLAW_IMAGE=ghcr.io/openclaw/openclaw:latest#" .env
+  else
     echo "OPENCLAW_IMAGE=ghcr.io/openclaw/openclaw:latest" >> .env
   fi
 
-  if ! grep -q "^OPENCLAW_GATEWAY_BIND=" .env 2>/dev/null; then
-    echo "OPENCLAW_GATEWAY_BIND=lan" >> .env
-  fi
+  # Kein OPENCLAW_GATEWAY_BIND erzwingen.
+  # Falls vorhanden, entfernen, damit Onboarding/Config entscheidet.
+  sed -i "/^OPENCLAW_GATEWAY_BIND=/d" .env
 '
 
 echo
@@ -196,9 +198,14 @@ echo "Dann IM CONTAINER ausführen:"
 echo "  cd /opt/openclaw"
 echo "  DOCKER_BUILDKIT=1 ./docker-setup.sh"
 echo
+echo "WICHTIG:"
+echo "  - Im Onboarding am besten Loopback wählen."
+echo "  - Für LAN später allowedOrigins sauber setzen."
+echo
 echo "Danach prüfen mit:"
 echo "  docker compose ps"
 echo "  docker compose logs --tail=100 openclaw-gateway"
+echo "  curl -I http://127.0.0.1:18789"
 echo "=========================================================="
 EOF
 )"
